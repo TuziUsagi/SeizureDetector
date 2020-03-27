@@ -15,10 +15,13 @@ The .gzip file contains a dataframe, the following keys are needed in the datafr
 # Model serving for seizure detection
 Run the analysisAll.py to detect seizure in your EEG recordings. 
 Specify your EEG input data as the inBaseDir, and the output data as the outBaseDir.
+
+# Output file format
+The output file contains predicted seizures start and end time. Each input file will have its own output file.
 The output format will be organized as a dataframe as follows:
 1. ['rawPrediction'] - predicted probability of all EEG signal segment (1024 EEG signal point/prediction window)
 2. ['seizure_50'], ['seizure_55'], ['seizure_65'], ['seizure_75'], ['seizure_85'], ['seizure_95'], ['seizure_99'] - EEG signal segments were examined and combined when necessary. If two prediction window both contains seizure spikes and are less than 2s away, they are combined. The seizure_number shows the prediction threshould used in the analysis. Note that the minimal seizure length has not yet been setted in here.
 3. ['numOfSeizure_50'], ['numOfSeizure_55'], ['numOfSeizure_65'], ['numOfSeizure_75'], ['numOfSeizure_85'], ['numOfSeizure_95'], ['numOfSeizure_99'] - number of seizure detected in the recording, with different prediction threshoulds. Note that the minimal seizure length has not yet been setted in here.
-4. ['seizure_2steps'], ['seizure_4steps'], ['seizure_6steps'], ['seizure_8steps'], ['seizure_10steps'] - seizure start and end time for all predicted seizure. Seizures were detected with minimal prediction window steps. Each step is 3 seconds, so the seizure_2steps means  6s for the minimal seizure duration.
-5. ['numOfSeizure_2steps'], ['numOfSeizure_4steps'], ['numOfSeizure_6steps'], ['numOfSeizure_8steps'], ['numOfSeizure_10steps'] - number of seizures after setting the minimal seizure duration.
+4. ['seizure_2steps'], ['seizure_4steps'], ['seizure_6steps'], ['seizure_8steps'], ['seizure_10steps'] - seizure start and end time for all predicted seizure. Seizures were detected with minimal prediction window steps. Each step is 3 seconds, so the seizure_2steps means  6s for the minimal seizure duration. 50% prediction threshold were used. 
+5. ['numOfSeizure_2steps'], ['numOfSeizure_4steps'], ['numOfSeizure_6steps'], ['numOfSeizure_8steps'], ['numOfSeizure_10steps'] - number of seizures after setting the minimal seizure duration. 50% prediction threshold were used. 
 
