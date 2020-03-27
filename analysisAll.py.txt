@@ -1,0 +1,226 @@
+import json
+from pathlib import Path
+import os.path
+import os
+import string
+from datetime import timedelta
+import datetime
+import numpy as np
+import pickle
+import gzip
+from getModel import getModel
+from matplotlib import pyplot as plt
+plt.ion()
+plt.show()
+inBaseDir = 'your input file directory'
+outBaseDir = 'your ouput directory'
+corruptedList = []
+corruptedListFilename = './corruptedList.gzip'
+logfile = open('computer1.log', 'a+')
+def normData(DataIn):
+  DataIn = DataIn.squeeze()
+  DataIn = DataIn - np.mean(DataIn) #Remove mean
+  datamax = np.max(DataIn)
+  datamin = np.min(DataIn)
+  DataIn = 2*(DataIn - datamin)/(datamax-datamin)-1
+  return DataIn
+  
+def getFileList(inBaseDir):
+  fileList = []
+  for fileName in Path(inBaseDir).glob("**/*.gzip"):
+    fileName = str(fileName)
+    fileName = fileName.replace(inBaseDir, '')
+    baseFileName = fileName.split('/')[-1]
+    if(baseFileName[0] == 'r'):
+      fileList.append(fileName)
+  return fileList
+
+def createDirSturcture(fileList, outBaseDir):
+  for fileName in fileList:
+    originalPath = fileName.split('/')
+    del originalPath[-1]
+    originalPath = '/'.join(originalPath)
+    newPath = outBaseDir+originalPath
+    if(not os.path.exists(newPath)):
+      os.makedirs(newPath)
+      
+def readDataBack(filename, inBaseDir):
+  with gzip.open(inBaseDir+filename,'rb') as fp:
+    try:
+      b = pickle.load(fp)
+      return b
+    except:
+      print(origFileName + ' corrupted!!!\n')
+      return 1
+
+def buildBatches(signal, step, sampleLen):
+  sigLen = len(signal)
+  batches = []
+  startIdx = 0
+  endIdx = sampleLen
+  while(endIdx <= sigLen):
+    batches.append(normData(signal[startIdx:endIdx]))
+    startIdx = startIdx + step
+    endIdx = startIdx + sampleLen
+  return batches
+  
+def serveBatches(batches, max_batch_size, sampleLen, model):
+  sigCount = 0
+  totalPred = []
+  singleBatch = []
+  for batch in batches:
+    singleBatch.append(np.reshape(batch, [sampleLen, 1]))
+    sigCount = sigCount + 1
+    if(sigCount%max_batch_size == 0 or sigCount >= len(batches)):
+      batchPred = model.predict(np.array(singleBatch))
+      batchPred = np.array(batchPred)
+      totalPred = totalPred + batchPred[:,0].tolist()
+      singleBatch = []		
+  return totalPred
+      
+
+def addProbToIndex(predicts, step):
+  predictsWindex = []
+  for count in range(len(predicts)):
+    idxTuple = (count*step, count*step+1024, predicts[count])
+    predictsWindex.append(idxTuple)
+  return predictsWindex
+  
+def combineInterval(predicts, threshold):
+  combinedInterval = []
+  outstandingInterval = False
+  curStartIdx = 0
+  curEndIdx = 0
+  curProb = 2
+  for count in range(len(predicts)):
+    if(predicts[count][2] > threshold): # Found a eligible interval
+      if(outstandingInterval): # If there is already a open interval, add current interval to it
+        curEndIdx = predicts[count][1]
+        if(curProb > predicts[count][2]):
+          curProb = predicts[count][2]
+        continue
+      else:  # No open interval, create one
+        outstandingInterval = True
+        curStartIdx = predicts[count][0]
+        curEndIdx = predicts[count][1]
+        curProb = predicts[count][2]
+        if(len(combinedInterval) > 0):
+          preInterval = combinedInterval[-1] # Get last interval
+          if(curStartIdx - preInterval[1] < 250*2): # If two intervals are within 2 secs, they should be combined
+            curStartIdx = preInterval[0]
+            if(curProb > predicts[count][2]):
+              curProb = predicts[count][2]
+            del combinedInterval[-1]
+        continue
+    else: # Found a ineligible interval
+      if(outstandingInterval): # if there is a open interval, need to close it and store
+        combinedInterval.append((curStartIdx, curEndIdx, curProb))
+        outstandingInterval = False
+        continue
+  if(outstandingInterval):
+    combinedInterval.append((curStartIdx, curEndIdx, curProb))    
+  return combinedInterval
+def checkIntervalLength(intervals, minLenInIdx):
+  longIntervals = []
+  longestInterval = -1
+  for interval in intervals:
+    if(interval[1] - interval[0] > longestInterval):
+      longestInterval = interval[1] - interval[0]
+    if(interval[1] - interval[0] > minLenInIdx):
+      longIntervals.append(interval)
+  if(longestInterval/250 > 60):
+    msg = 'Unusually long interval detected: ' + str(int(longestInterval/250)) + 's!' 
+    print(msg)
+    logfile.write(msg + '\n')
+  return longIntervals
+  
+def analysisBatches(predicts, step, fs):
+  predicts = addProbToIndex(predicts, step)
+  ResultDict = {}
+  ResultDict['rawPrediction'] = predicts
+  ResultDict['seizure_50'] = combineInterval(predicts, 0.50)
+  ResultDict['seizure_55'] = combineInterval(predicts, 0.55)
+  ResultDict['seizure_65'] = combineInterval(predicts, 0.65)
+  ResultDict['seizure_75'] = combineInterval(predicts, 0.75)
+  ResultDict['seizure_85'] = combineInterval(predicts, 0.85)
+  ResultDict['seizure_95'] = combineInterval(predicts, 0.95)
+  ResultDict['seizure_99'] = combineInterval(predicts, 0.99)
+  ResultDict['numOfSeizure_50'] = len(ResultDict['seizure_50'])
+  ResultDict['numOfSeizure_55'] = len(ResultDict['seizure_55'])
+  ResultDict['numOfSeizure_65'] = len(ResultDict['seizure_65'])
+  ResultDict['numOfSeizure_75'] = len(ResultDict['seizure_75'])
+  ResultDict['numOfSeizure_85'] = len(ResultDict['seizure_85'])
+  ResultDict['numOfSeizure_95'] = len(ResultDict['seizure_95'])
+  ResultDict['numOfSeizure_99'] = len(ResultDict['seizure_99'])
+  ResultDict['seizure_2steps'] = checkIntervalLength(ResultDict['seizure_50'], 6*fs) # 6s
+  ResultDict['seizure_4steps'] = checkIntervalLength(ResultDict['seizure_50'], 10*fs)# 10s
+  ResultDict['seizure_6steps'] = checkIntervalLength(ResultDict['seizure_50'], 14*fs)# 14s
+  ResultDict['seizure_8steps'] = checkIntervalLength(ResultDict['seizure_50'], 18*fs)# 18s
+  ResultDict['seizure_10steps'] = checkIntervalLength(ResultDict['seizure_50'], 22*fs)# 18s
+  ResultDict['numOfSeizure_2steps'] = len(ResultDict['seizure_2steps'])
+  ResultDict['numOfSeizure_4steps'] = len(ResultDict['seizure_4steps'])
+  ResultDict['numOfSeizure_6steps'] = len(ResultDict['seizure_6steps'])
+  ResultDict['numOfSeizure_8steps'] = len(ResultDict['seizure_8steps'])
+  ResultDict['numOfSeizure_10steps'] = len(ResultDict['seizure_10steps'])
+  msg = 'Found total seizure: ' + str(ResultDict['numOfSeizure_50']) + '. 95% confident seizure: ' + str(ResultDict['numOfSeizure_95']) + '. Longer than 18s seizure: ' + str(ResultDict['numOfSeizure_8steps'])
+  print(msg)
+  logfile.write(msg+'\n')
+  return ResultDict
+
+def analysisData(dataDict, filename, outBaseDir, model):
+  max_batch_size = 4096
+  step = 750 # 3 sec
+  sampleLen = 1024
+  outFile = outBaseDir+filename
+  fs = dataDict['fs']
+  assert fs == 250
+  recStart = dataDict['recStart']
+  numOfChannel = dataDict['numOfChannels']
+  msg = 'This file has ' + str(numOfChannel) + ' channels.' 
+  print(msg)
+  logfile.write(msg + 'nb')
+  signalLength = dataDict['signalLength']
+  signalLenSec = int(signalLength/fs)
+  tdelta = timedelta(seconds = signalLenSec)
+  recEnd = recStart + tdelta
+  outDict = {}
+  outDict['recStart'] = recStart
+  outDict['recEnd'] = recEnd
+  outDict['numOfChannels'] = numOfChannel
+  outDict['signalLength'] = signalLength
+  outDict['signalLenSec'] = signalLenSec
+  outDict['signalResults'] = []
+  allSignal = dataDict['signal']
+  for sigCount in range(numOfChannel):
+    signal = allSignal[:,sigCount] # Channel last
+    batches = buildBatches(signal, step, sampleLen)
+    predicts = serveBatches(batches, max_batch_size, sampleLen, model)
+    singleSigResultDict = analysisBatches(predicts, step, fs)
+    outDict['signalResults'].append(singleSigResultDict)
+  with gzip.open(outFile,'wb') as fp:
+    pickle.dump(outDict, fp, protocol=pickle.HIGHEST_PROTOCOL)
+    
+fileList = getFileList(inBaseDir)
+if (not os.path.exists(outBaseDir)):
+  createDirSturcture(fileList, outBaseDir)
+model = getModel()
+totalNumOfFiles = len(fileList)
+fileCount = 0
+for filename in fileList:
+  fileCount = fileCount + 1
+  msg = 'Processing file: ' + filename + ', progress: ' + str(fileCount)+'/'+str(totalNumOfFiles)
+  print(msg+'\n')
+  logfile.write(msg + '\n')
+  dataDict = readDataBack(filename, inBaseDir)
+  if(dataDict == 1 or dataDict == None):
+    corruptedList.append(filename)
+    with gzip.open(corruptedListFilename, 'wb') as fp:
+      pickle.dump(corruptedList, fp)
+    exit()
+  if(os.path.exists(outBaseDir+filename)):
+    print(filename + ' processed, continue.')
+    continue
+  analysisData(dataDict, filename, outBaseDir, model)
+  print('\n')
+  logfile.write('\n')
+logfile.close()

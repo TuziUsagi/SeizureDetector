@@ -1,0 +1,41 @@
+rom __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import tensorflow as tf
+from myModel import eeg_model as create_model
+from hparam import gethparam
+from tensorflow.python import debug as tf_debug
+import os
+import numpy as np
+import pickle
+from tensorflow.compat.v1.keras import backend as K
+
+# Disable learning, all variables will be treated as constant
+K.set_learning_phase(0)
+#tf.enable_eager_execution()
+#Setup network
+def getModel():
+  hparams = gethparam()
+  mode = 'Predict'
+
+  # Get optimizer
+  EEGOptimizer = tf.keras.optimizers.Adam(learning_rate = hparams['learning_rate'], beta_1 = hparams['AdamBeta1'], beta_2 = hparams['AdamBeta2'], epsilon = hparams['epsilon'])
+
+  # Get loss function
+  lossFunc = tf.keras.losses.CategoricalCrossentropy()
+
+  # Metrics
+  accMetrics = tf.keras.metrics.CategoricalAccuracy()
+
+  # Get model
+  model = create_model(hparams, mode)
+  model.trainable = False
+  model.summary()
+  #model.compile(optimizer = EEGOptimizer, loss = lossFunc, metrics = [accMetrics])
+  sess = tf.compat.v1.keras.backend.get_session()
+  model.load_weights(hparams['checkPointDir']+'.h5')
+  print('Model restored!')
+  print(model.layers[-3].name)
+  model.outputs = [model.layers[-3].output]
+  return model
