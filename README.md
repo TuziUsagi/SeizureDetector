@@ -16,29 +16,9 @@ The .gzip file contains a dataframe, the following keys are needed in the datafr
 Run the analysisAll.py to detect seizure in your EEG recordings. 
 Specify your EEG input data as the inBaseDir, and the output data as the outBaseDir.
 The output format will be organized as a dataframe as follows:
-['rawPrediction'] = predicts
-['seizure_50'] = combineInterval(predicts, 0.50)
-['seizure_55'] = combineInterval(predicts, 0.55)
-['seizure_65'] = combineInterval(predicts, 0.65)
-['seizure_75'] = combineInterval(predicts, 0.75)
-['seizure_85'] = combineInterval(predicts, 0.85)
-['seizure_95'] = combineInterval(predicts, 0.95)
-['seizure_99'] = combineInterval(predicts, 0.99)
-['numOfSeizure_50'] = len(ResultDict['seizure_50'])
-['numOfSeizure_55'] = len(ResultDict['seizure_55'])
-['numOfSeizure_65'] = len(ResultDict['seizure_65'])
-['numOfSeizure_75'] = len(ResultDict['seizure_75'])
-['numOfSeizure_85'] = len(ResultDict['seizure_85'])
-['numOfSeizure_95'] = len(ResultDict['seizure_95'])
-['numOfSeizure_99'] = len(ResultDict['seizure_99'])
-['seizure_2steps'] = checkIntervalLength(ResultDict['seizure_50'], 6*fs) # 6s
-['seizure_4steps'] = checkIntervalLength(ResultDict['seizure_50'], 10*fs)# 10s
-['seizure_6steps'] = checkIntervalLength(ResultDict['seizure_50'], 14*fs)# 14s
-['seizure_8steps'] = checkIntervalLength(ResultDict['seizure_50'], 18*fs)# 18s
-['seizure_10steps'] = checkIntervalLength(ResultDict['seizure_50'], 22*fs)# 18s
-['numOfSeizure_2steps'] = len(ResultDict['seizure_2steps'])
-['numOfSeizure_4steps'] = len(ResultDict['seizure_4steps'])
-['numOfSeizure_6steps'] = len(ResultDict['seizure_6steps'])
-['numOfSeizure_8steps'] = len(ResultDict['seizure_8steps'])
-['numOfSeizure_10steps'] = len(ResultDict['seizure_10steps'])
+1. ['rawPrediction'] - predicted probability of all EEG signal segment (1024 EEG signal point/prediction window)
+2. ['seizure_50'], ['seizure_55'], ['seizure_65'], ['seizure_75'], ['seizure_85'], ['seizure_95'], ['seizure_99'] - EEG signal segments were examined and combined when necessary. If two prediction window both contains seizure spikes and are less than 2s away, they are combined. The seizure_number shows the prediction threshould used in the analysis. Note that the minimal seizure length has not yet been setted in here.
+3. ['numOfSeizure_50'], ['numOfSeizure_55'], ['numOfSeizure_65'], ['numOfSeizure_75'], ['numOfSeizure_85'], ['numOfSeizure_95'], ['numOfSeizure_99'] - number of seizure detected in the recording, with different prediction threshoulds. Note that the minimal seizure length has not yet been setted in here.
+4. ['seizure_2steps'], ['seizure_4steps'], ['seizure_6steps'], ['seizure_8steps'], ['seizure_10steps'] - seizure start and end time for all predicted seizure. Seizures were detected with minimal prediction window steps. Each step is 3 seconds, so the seizure_2steps means  6s for the minimal seizure duration.
+5. ['numOfSeizure_2steps'], ['numOfSeizure_4steps'], ['numOfSeizure_6steps'], ['numOfSeizure_8steps'], ['numOfSeizure_10steps'] - number of seizures after setting the minimal seizure duration.
 
